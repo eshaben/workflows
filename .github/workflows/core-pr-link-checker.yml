@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ inputs.docs_repo }}
-          path: docs-tmp
+          path: temp-docs-checkout
           ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ secrets.GH_TOKEN }}
 
@@ -43,11 +43,12 @@ jobs:
           echo "Current working directory: $(pwd)"
           echo "Directory contents:"
           ls -la
-          echo "docs-tmp contents:"
-          ls -la docs-tmp/ || echo "docs-tmp directory not found"
+          echo "temp-docs-checkout contents:"
+          ls -la temp-docs-checkout/ || \
+            echo "temp-docs-checkout directory not found"
 
       - name: 'Fetch base branch for diff'
-        working-directory: docs-tmp
+        working-directory: temp-docs-checkout
         run: |
           echo "Current working directory: $(pwd)"
           echo "Directory contents: $(ls -la)"
@@ -56,7 +57,7 @@ jobs:
 
       - name: 'Get list of added Markdown pages'
         id: added_pages
-        working-directory: docs-tmp
+        working-directory: temp-docs-checkout
         run: |
           echo "Current working directory: $(pwd)"
           echo "Git remotes: $(git remote -v)"
@@ -74,8 +75,8 @@ jobs:
       - name: 'Move Docs into MkDocs Repo'
         run: |
           # Copy the added_pages.txt to the root before moving
-          cp docs-tmp/added_pages.txt ./added_pages.txt
-          mv docs-tmp \
+          cp temp-docs-checkout/added_pages.txt ./added_pages.txt
+          mv temp-docs-checkout \
             "${{ inputs.mkdocs_repo_name }}/${{ inputs.docs_repo_name }}"
 
       - name: 'Set up Python'

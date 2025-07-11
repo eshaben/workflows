@@ -55,6 +55,31 @@ jobs:
         working-directory: ${{ inputs.mkdocs_repo_name }}
         run: |
           mkdocs build -d site
+      
+      - name: 'Get list of added Markdown pages'
+        id: added_pages
+        run: |
+          echo "Collecting newly added .md files..."
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+          git diff --name-status origin/${{ github.event.pull_request.base.ref }}...HEAD | awk '$1 == "A" && $2 ~ /\.md$/ {print $2}' > added_pages.txt
+          cat added_pages.txt
+
+      - name: Convert added pages to excluded URLs
+        id: ignore_links
+        run: |
+          IGNORED_LINKS=""
+
+          while read -r FILE; do
+            # Only process non-empty lines
+            [ -z "$FILE" ] && continue
+
+            # Strip leading docs/ if present, remove .md, trim index.md
+            PATH=$(echo "$FILE" | sed -e 's/^docs\///' -e 's/index\.md$//' -e 's/\.md$//')
+            URL="${{ inputs.mkdocs_repo_name }}/${PATH}/"
+            IGNORED_LINKS="$IGNORED_LINKS --exclude $URL"
+          done < added_pages.txt
+
+          echo "ignored=$IGNORED_LINKS" >> $GITHUB_OUTPUT     
 
       - name: Prepare Lychee Arguments
         id: lychee_args
@@ -73,6 +98,7 @@ jobs:
         with:
           args: >
             ${{ steps.lychee_args.outputs.args }}
+            ${{ steps.ignore_links.outputs.ignored }}
             './${{ inputs.mkdocs_repo_name }}/site/**/*.html'
           fail: true
         continue-on-error: false

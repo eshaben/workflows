@@ -61,6 +61,7 @@ jobs:
 
       - name: 'Get list of added Markdown pages'
         id: added_pages
+        working-directory: ${{ inputs.docs_repo_name }}
         run: |
           echo "Collecting newly added .md files..."
           git fetch origin ${{ github.event.pull_request.base.ref }}

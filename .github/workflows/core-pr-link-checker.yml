@@ -1,7 +1,6 @@
----
 name: 'Reusable Link Check Workflow'
 
-'on':
+on:
   workflow_call:
     inputs:
       mkdocs_repo:
@@ -30,16 +29,6 @@ jobs:
   check-links:
     runs-on: ubuntu-latest
     steps:
-      - name: 'Debug PR Information'
-        run: |
-          echo "=== PR Information ==="
-          echo "PR Head Ref: ${{ github.event.pull_request.head.ref }}"
-          echo "PR Head SHA: ${{ github.event.pull_request.head.sha }}"
-          echo "PR Base Ref: ${{ github.event.pull_request.base.ref }}"
-          echo "PR Base SHA: ${{ github.event.pull_request.base.sha }}"
-          echo "Docs Repo: ${{ inputs.docs_repo }}"
-          echo ""
-
       - name: 'Checkout Docs Repo'
         uses: actions/checkout@v4
         with:
@@ -51,75 +40,16 @@ jobs:
       - name: 'Fetch base branch for diff'
         working-directory: docs-tmp
         run: |
-          echo "Current working directory: $(pwd)"
-          echo "Git remotes: $(git remote -v)"
-          echo "Current branch: $(git branch --show-current)"
-          echo "Current HEAD: $(git rev-parse HEAD)"
-          echo ""
-          
-          # Fetch the base branch explicitly
-          echo "Fetching base branch: ${{ github.event.pull_request.base.ref }}"
-          git fetch origin \
-            ${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}
-
-          echo ""
-          echo "Available branches after fetch:"
-          git branch -a
-
-          echo ""
-          echo "Available refs:"
-          git show-ref | \
-            grep -E "(origin/${{ github.event.pull_request.base.ref }}|HEAD)"
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+          git fetch origin "$BASE_REF:refs/remotes/origin/$BASE_REF"
 
       - name: 'Get list of added Markdown pages'
         id: added_pages
         working-directory: docs-tmp
         run: |
-          echo "Current working directory: $(pwd)"
-          echo "Git remotes: $(git remote -v)"
-          echo ""
-          echo "=== Git Diff Analysis ==="
-          echo "Checking for files added between origin/${{ github.event.pull_request.base.ref }} and HEAD"
-          
-          # Show all changed files first
-          echo ""
-          echo "All changed files (with status):"
-          if git diff --name-status origin/${{ github.event.pull_request.base.ref }}...HEAD 2>/dev/null; then
-            echo "Three-dot diff worked"
-          else
-            echo "Three-dot diff failed, trying two-dot diff:"
-            git diff --name-status origin/${{ github.event.pull_request.base.ref }}..HEAD || echo "Two-dot diff also failed"
-          fi
-          
-          echo ""
-          echo "=== Filtering for Added Markdown Files ==="
-          
-          # Try three-dot diff first, fallback to two-dot
-          if git diff --name-status origin/${{ github.event.pull_request.base.ref }}...HEAD 2>/dev/null | \
-             awk '$1 == "A" && $2 ~ /\.md$/ {print $2}' > added_pages.txt; then
-            echo "Used three-dot diff successfully"
-          else
-            echo "Three-dot diff failed, using two-dot diff:"
-            git diff --name-status origin/${{ github.event.pull_request.base.ref }}..HEAD | \
-              awk '$1 == "A" && $2 ~ /\.md$/ {print $2}' > added_pages.txt
-          fi
-          
-          # Count and display results
-          ADDED_COUNT=$(wc -l < added_pages.txt)
-          echo "Found $ADDED_COUNT added markdown files:"
-          
-          if [ -s added_pages.txt ]; then
-            echo "Added markdown files:"
-            while IFS= read -r file; do
-              echo "  - $file"
-            done < added_pages.txt
-          else
-            echo "No added markdown files found in this PR."
-          fi
-          
-          echo ""
-          echo "Contents of added_pages.txt:"
-          cat added_pages.txt
+          git diff --name-status \
+            origin/${{ github.event.pull_request.base.ref }}...HEAD | \
+            awk '$1 == "A" && $2 ~ /\.md$/ {print $2}' > added_pages.txt
 
       - name: 'Checkout MkDocs Repo'
         uses: actions/checkout@v4
@@ -155,43 +85,14 @@ jobs:
         id: ignore_links
         if: ${{ inputs.url != '' }}
         run: |
-          echo "=== Converting Added Pages to Excluded URLs ==="
-          echo "Base URL: ${{ inputs.url }}"
-          echo ""
-          
-          if [ ! -f added_pages.txt ]; then
-            echo "❌ added_pages.txt file not found!"
-            exit 1
-          fi
-          
-          ADDED_COUNT=$(wc -l < added_pages.txt)
-          echo "Processing $ADDED_COUNT added markdown files..."
-          echo ""
-          
           IGNORED_LINKS=""
-          PROCESSED_COUNT=0
-          
           while read -r FILE; do
             [ -z "$FILE" ] && continue
-            
-            PROCESSED_COUNT=$((PROCESSED_COUNT + 1))
-            echo "Processing file $PROCESSED_COUNT: $FILE"
-            
-            # Transform the file path to URL path
             PATH=$(echo "$FILE" | sed -e 's/^docs\///' \
               -e 's/index\.md$//' -e 's/\.md$//')
             URL="${{ inputs.url }}/${PATH}/"
-            
-            echo "  → Transformed to URL: $URL"
             IGNORED_LINKS="$IGNORED_LINKS --exclude $URL"
           done < added_pages.txt
-          
-          echo ""
-          echo "=== Summary ==="
-          echo "Processed $PROCESSED_COUNT files"
-          echo "Generated exclusion arguments: $IGNORED_LINKS"
-          echo ""
-          
           echo "ignored=$IGNORED_LINKS" >> $GITHUB_OUTPUT
 
       - name: 'Prepare Lychee Arguments'

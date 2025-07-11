@@ -30,18 +30,46 @@ jobs:
   check-links:
     runs-on: ubuntu-latest
     steps:
+      - name: 'Debug PR Information'
+        run: |
+          echo "=== PR Information ==="
+          echo "PR Head Ref: ${{ github.event.pull_request.head.ref }}"
+          echo "PR Head SHA: ${{ github.event.pull_request.head.sha }}"
+          echo "PR Base Ref: ${{ github.event.pull_request.base.ref }}"
+          echo "PR Base SHA: ${{ github.event.pull_request.base.sha }}"
+          echo "Docs Repo: ${{ inputs.docs_repo }}"
+          echo ""
+
       - name: 'Checkout Docs Repo'
         uses: actions/checkout@v4
         with:
           repository: ${{ inputs.docs_repo }}
           path: docs-tmp
           ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0  # Fetch full history for proper diff
 
       - name: 'Fetch base branch for diff'
         working-directory: docs-tmp
         run: |
-          git remote add upstream https://github.com/${{ inputs.docs_repo }}.git
-          git fetch upstream ${{ github.event.pull_request.base.ref }}
+          echo "Current working directory: $(pwd)"
+          echo "Git remotes: $(git remote -v)"
+          echo "Current branch: $(git branch --show-current)"
+          echo "Current HEAD: $(git rev-parse HEAD)"
+          echo ""
+          
+          # Fetch the base branch explicitly
+          echo "Fetching base branch: ${{ github.event.pull_request.base.ref }}"
+          git fetch origin \
+            ${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}
+
+          echo ""
+          echo "Available branches after fetch:"
+          git branch -a
+
+          echo ""
+          echo "Available refs:"
+          git show-ref | \
+            grep -E "(origin/${{ github.event.pull_request.base.ref }}|HEAD)"
 
       - name: 'Get list of added Markdown pages'
         id: added_pages
@@ -51,21 +79,30 @@ jobs:
           echo "Git remotes: $(git remote -v)"
           echo ""
           echo "=== Git Diff Analysis ==="
-          echo "Checking for files added between upstream/${{ github.event.pull_request.base.ref }} and HEAD"
+          echo "Checking for files added between origin/${{ github.event.pull_request.base.ref }} and HEAD"
           
           # Show all changed files first
           echo ""
           echo "All changed files (with status):"
-          git diff --name-status \
-            upstream/${{ github.event.pull_request.base.ref }}...HEAD || echo "Git diff failed"
+          if git diff --name-status origin/${{ github.event.pull_request.base.ref }}...HEAD 2>/dev/null; then
+            echo "Three-dot diff worked"
+          else
+            echo "Three-dot diff failed, trying two-dot diff:"
+            git diff --name-status origin/${{ github.event.pull_request.base.ref }}..HEAD || echo "Two-dot diff also failed"
+          fi
           
           echo ""
           echo "=== Filtering for Added Markdown Files ==="
           
-          # Filter for added markdown files and show the process
-          git diff --name-status \
-            upstream/${{ github.event.pull_request.base.ref }}...HEAD | \
-            awk '$1 == "A" && $2 ~ /\.md$/ {print $2}' > added_pages.txt
+          # Try three-dot diff first, fallback to two-dot
+          if git diff --name-status origin/${{ github.event.pull_request.base.ref }}...HEAD 2>/dev/null | \
+             awk '$1 == "A" && $2 ~ /\.md$/ {print $2}' > added_pages.txt; then
+            echo "Used three-dot diff successfully"
+          else
+            echo "Three-dot diff failed, using two-dot diff:"
+            git diff --name-status origin/${{ github.event.pull_request.base.ref }}..HEAD | \
+              awk '$1 == "A" && $2 ~ /\.md$/ {print $2}' > added_pages.txt
+          fi
           
           # Count and display results
           ADDED_COUNT=$(wc -l < added_pages.txt)

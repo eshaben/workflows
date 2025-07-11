@@ -36,7 +36,6 @@ jobs:
           repository: ${{ inputs.docs_repo }}
           path: temp-docs-checkout
           ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.GH_TOKEN }}
 
       - name: 'Debug - Show initial directory structure'
         run: |

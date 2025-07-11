@@ -49,8 +49,8 @@ jobs:
         run: |
           git diff --name-status \
             upstream/${{ github.event.pull_request.base.ref }}...HEAD | \
-            awk '$1 == "A" && $2 ~ /\.md$/ {print $2}' > ../added_pages.txt
-          cat ../added_pages.txt
+            awk '$1 == "A" && $2 ~ /\.md$/ {print $2}' > added_pages.txt
+          cat added_pages.txt
 
       - name: 'Checkout MkDocs Repo'
         uses: actions/checkout@v4
@@ -60,6 +60,8 @@ jobs:
 
       - name: 'Move Docs into MkDocs Repo'
         run: |
+          # Copy the added_pages.txt to the root before moving
+          cp docs-tmp/added_pages.txt ./added_pages.txt
           mv docs-tmp \
             "${{ inputs.mkdocs_repo_name }}/${{ inputs.docs_repo_name }}"
 

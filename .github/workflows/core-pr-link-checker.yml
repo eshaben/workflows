@@ -29,20 +29,39 @@ jobs:
   check-links:
     runs-on: ubuntu-latest
     steps:
+      - name: 'Checkout Docs Repo'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.docs_repo }}
+          path: docs-tmp
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: 'Fetch base branch for diff'
+        working-directory: docs-tmp
+        run: |
+          git remote add upstream https://github.com/${{ inputs.docs_repo }}.git
+          git fetch upstream ${{ github.event.pull_request.base.ref }}
+
+      - name: 'Get list of added Markdown pages'
+        id: added_pages
+        working-directory: docs-tmp
+        run: |
+          git diff --name-status \
+            upstream/${{ github.event.pull_request.base.ref }}...HEAD | \
+            awk '$1 == "A" && $2 ~ /\.md$/ {print $2}' > ../added_pages.txt
+          cat ../added_pages.txt
+
       - name: 'Checkout MkDocs Repo'
         uses: actions/checkout@v4
         with:
           repository: ${{ inputs.mkdocs_repo }}
           path: ${{ inputs.mkdocs_repo_name }}
-          fetch-depth: 1
 
-      - name: 'Checkout Docs Repo'
-        if: ${{ inputs.docs_repo != inputs.mkdocs_repo }}
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.docs_repo }}
-          path: '${{ inputs.mkdocs_repo_name}}/${{ inputs.docs_repo_name}}'
-          fetch-depth: 0
+      - name: 'Move Docs into MkDocs Repo'
+        run: |
+          mv docs-tmp \
+            "${{ inputs.mkdocs_repo_name }}/${{ inputs.docs_repo_name }}"
 
       - name: 'Set up Python'
         uses: actions/setup-python@v5
@@ -61,26 +80,9 @@ jobs:
         run: |
           mkdocs build -d site
 
-      - name: 'Get list of added Markdown pages'
-        id: added_pages
-        if: ${{ inputs.url != '' }}
-        working-directory: >-
-          ${{ inputs.mkdocs_repo_name }}/${{ inputs.docs_repo_name }}
-        run: |
-          echo "Collecting newly added .md files..."
-          git remote add origin \
-            https://github.com/${{ inputs.docs_repo }}.git
-          git fetch origin ${{ github.event.pull_request.base.ref }}
-          git diff --name-status \
-            origin/${{ github.event.pull_request.base.ref }}...HEAD | \
-            awk '$1 == "A" && $2 ~ /\.md$/ {print $2}' > added_pages.txt
-          cat added_pages.txt
-
       - name: 'Convert added pages to excluded URLs'
         id: ignore_links
         if: ${{ inputs.url != '' }}
-        working-directory: >-
-          ${{ inputs.mkdocs_repo_name }}/${{ inputs.docs_repo_name }}
         run: |
           IGNORED_LINKS=""
           while read -r FILE; do

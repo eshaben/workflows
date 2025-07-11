@@ -29,40 +29,29 @@ jobs:
   check-links:
     runs-on: ubuntu-latest
     steps:
-      - name: 'Checkout Docs Repo'
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.docs_repo }}
-          path: docs-tmp
-          ref: ${{ github.event.pull_request.head.ref }}
-          fetch-depth: 0  # Fetch full history for proper diff
-
-      - name: 'Fetch base branch for diff'
-        working-directory: docs-tmp
-        run: |
-          BASE_REF="${{ github.event.pull_request.base.ref }}"
-          git fetch origin "$BASE_REF:refs/remotes/origin/$BASE_REF"
-
-      - name: 'Get list of added Markdown pages'
-        id: added_pages
-        working-directory: docs-tmp
-        run: |
-          git diff --name-status \
-            origin/${{ github.event.pull_request.base.ref }}...HEAD | \
-            awk '$1 == "A" && $2 ~ /\.md$/ {print $2}' > added_pages.txt
-
       - name: 'Checkout MkDocs Repo'
         uses: actions/checkout@v4
         with:
           repository: ${{ inputs.mkdocs_repo }}
           path: ${{ inputs.mkdocs_repo_name }}
 
-      - name: 'Move Docs into MkDocs Repo'
+      - name: 'Checkout Docs Repo into MkDocs'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.docs_repo }}
+          path: ${{ inputs.mkdocs_repo_name }}/${{ inputs.docs_repo_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: 'Get added Markdown files for exclusion'
+        id: added_pages
+        working-directory: >-
+          ${{ inputs.mkdocs_repo_name }}/${{ inputs.docs_repo_name }}
         run: |
-          # Copy the added_pages.txt to the root before moving
-          cp docs-tmp/added_pages.txt ./added_pages.txt
-          mv docs-tmp \
-            "${{ inputs.mkdocs_repo_name }}/${{ inputs.docs_repo_name }}"
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+          git fetch origin "$BASE_REF:refs/remotes/origin/$BASE_REF"
+          git diff --name-status origin/$BASE_REF...HEAD | \
+            awk '$1 == "A" && $2 ~ /\.md$/ {print $2}' > /tmp/added_pages.txt
 
       - name: 'Set up Python'
         uses: actions/setup-python@v5
@@ -92,7 +81,7 @@ jobs:
               -e 's/index\.md$//' -e 's/\.md$//')
             URL="${{ inputs.url }}/${PATH}/"
             IGNORED_LINKS="$IGNORED_LINKS --exclude $URL"
-          done < added_pages.txt
+          done < /tmp/added_pages.txt
           echo "ignored=$IGNORED_LINKS" >> $GITHUB_OUTPUT
 
       - name: 'Prepare Lychee Arguments'
@@ -116,4 +105,3 @@ jobs:
             ${{ steps.ignore_links.outputs.ignored }}
             './${{ inputs.mkdocs_repo_name }}/site/**/*.html'
           fail: true
-        continue-on-error: false

@@ -55,13 +55,15 @@ jobs:
         working-directory: ${{ inputs.mkdocs_repo_name }}
         run: |
           mkdocs build -d site
-      
+
       - name: 'Get list of added Markdown pages'
         id: added_pages
         run: |
           echo "Collecting newly added .md files..."
           git fetch origin ${{ github.event.pull_request.base.ref }}
-          git diff --name-status origin/${{ github.event.pull_request.base.ref }}...HEAD | awk '$1 == "A" && $2 ~ /\.md$/ {print $2}' > added_pages.txt
+          git diff --name-status \
+            origin/${{ github.event.pull_request.base.ref }}...HEAD | \
+            awk '$1 == "A" && $2 ~ /\.md$/ {print $2}' > added_pages.txt
           cat added_pages.txt
 
       - name: Convert added pages to excluded URLs
@@ -74,20 +76,23 @@ jobs:
             [ -z "$FILE" ] && continue
 
             # Strip leading docs/ if present, remove .md, trim index.md
-            PATH=$(echo "$FILE" | sed -e 's/^docs\///' -e 's/index\.md$//' -e 's/\.md$//')
+            PATH=$(echo "$FILE" | sed -e 's/^docs\///' \
+              -e 's/index\.md$//' -e 's/\.md$//')
             URL="${{ inputs.mkdocs_repo_name }}/${PATH}/"
             IGNORED_LINKS="$IGNORED_LINKS --exclude $URL"
           done < added_pages.txt
 
-          echo "ignored=$IGNORED_LINKS" >> $GITHUB_OUTPUT     
+          echo "ignored=$IGNORED_LINKS" >> $GITHUB_OUTPUT
 
       - name: Prepare Lychee Arguments
         id: lychee_args
         run: |
-          ARGS="--root-dir $(pwd)/${{ inputs.mkdocs_repo_name }}/site --no-progress --accept 429,403"
+          ARGS="--root-dir $(pwd)/${{ inputs.mkdocs_repo_name }}/site \
+            --no-progress --accept 429,403"
           if [[ -f "$(pwd)/${{ inputs.mkdocs_repo_name }}/.urlignore" ]]; then
             echo "Found .urlignore file. Adding to lychee arguments."
-            ARGS="$ARGS --exclude-file $(pwd)/${{ inputs.mkdocs_repo_name }}/.urlignore"
+            ARGS="$ARGS --exclude-file \
+              $(pwd)/${{ inputs.mkdocs_repo_name }}/.urlignore"
           fi
           echo "args=$ARGS" >> $GITHUB_OUTPUT
 

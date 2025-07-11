@@ -1,6 +1,7 @@
+---
 name: 'Reusable Link Check Workflow'
 
-on:
+'on':
   workflow_call:
     inputs:
       mkdocs_repo:
@@ -37,9 +38,19 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ secrets.GH_TOKEN }}
 
+      - name: 'Debug - Show initial directory structure'
+        run: |
+          echo "Current working directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
+          echo "docs-tmp contents:"
+          ls -la docs-tmp/ || echo "docs-tmp directory not found"
+
       - name: 'Fetch base branch for diff'
         working-directory: docs-tmp
         run: |
+          echo "Current working directory: $(pwd)"
+          echo "Directory contents: $(ls -la)"
           git remote add upstream https://github.com/${{ inputs.docs_repo }}.git
           git fetch upstream ${{ github.event.pull_request.base.ref }}
 
@@ -47,6 +58,8 @@ jobs:
         id: added_pages
         working-directory: docs-tmp
         run: |
+          echo "Current working directory: $(pwd)"
+          echo "Git remotes: $(git remote -v)"
           git diff --name-status \
             upstream/${{ github.event.pull_request.base.ref }}...HEAD | \
             awk '$1 == "A" && $2 ~ /\.md$/ {print $2}' > added_pages.txt

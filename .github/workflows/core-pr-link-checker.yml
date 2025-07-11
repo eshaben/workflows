@@ -18,6 +18,9 @@ on:
       root_dir:
         required: false
         type: string
+      url:
+        required: false
+        type: string
     secrets:
       GH_TOKEN:
         required: true
@@ -68,6 +71,7 @@ jobs:
 
       - name: Convert added pages to excluded URLs
         id: ignore_links
+        if: ${{ inputs.url != '' }}
         run: |
           IGNORED_LINKS=""
 

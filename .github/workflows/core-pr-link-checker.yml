@@ -1,7 +1,6 @@
----
 name: 'Reusable Link Check Workflow'
 
-'on':
+on:
   workflow_call:
     inputs:
       mkdocs_repo:
@@ -54,7 +53,8 @@ jobs:
 
           # Get newly added .md and .ipynb files
           git diff --name-status origin/$BASE_REF...HEAD | \
-            awk '$1 == "A" && ($2 ~ /\.md$/ || $2 ~ /\.ipynb$/) {print $2}' > /tmp/added_pages.txt
+            awk '$1 == "A" && ($2 ~ /\.md$/ || $2 ~ /\.ipynb$/) {print $2}' \
+            > /tmp/added_pages.txt
 
           ADDED_COUNT=$(wc -l < /tmp/added_pages.txt)
           echo "📄 Found $ADDED_COUNT added files in this PR:"
@@ -84,7 +84,7 @@ jobs:
         run: |
           mkdocs build -d site
 
-      - name: Convert Added Files to Excluded URLs
+      - name: 'Convert Added Pages to Excluded URLs'
         id: ignore_links
         if: ${{ inputs.url != '' }}
         run: |
@@ -133,3 +133,4 @@ jobs:
             ${{ steps.ignore_links.outputs.ignored }}
             './${{ inputs.mkdocs_repo_name }}/site/**/*.html'
           fail: true
+        continue-on-error: false

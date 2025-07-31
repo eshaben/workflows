@@ -102,15 +102,16 @@ jobs:
           # Function to convert file path to URL path
           convert_to_url_path() {
             local file="$1"
+            
+            # Check if the original file path starts with a dot (private/hidden files)
+            if [[ "$file" =~ ^\. ]]; then
+              echo ""
+              return
+            fi
+            
             # Remove docs/ prefix, handle index files, and remove extensions
             local url_path=$(echo "$file" | sed -e "s/^${DOCS_PREFIX}//" -e "s/${INDEX_PATTERN}//" -e "s/${EXTENSION_PATTERN}//" | sed 's/\/$//')
-            
-            # If the URL path starts with a dot, return empty (these are private/hidden files)
-            if [[ "$url_path" =~ ^\. ]]; then
-              echo ""
-            else
-              echo "$url_path"
-            fi
+            echo "$url_path"
           }
 
           # Function to process a single file and add to exclude args

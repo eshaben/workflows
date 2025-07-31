@@ -87,10 +87,7 @@ jobs:
           MKDOCS_REPO_NAME: ${{ steps.vars.outputs.mkdocs_repo_name }}
           BASE_URL: ${{ inputs.url }}
         run: |
-          # Constants
-          readonly DOCS_PREFIX="docs/"
-          readonly INDEX_PATTERN="index\.(md|ipynb)$"
-          readonly EXTENSION_PATTERN="\.(md|ipynb)$"
+
           
           # Validate required environment variables
           if [[ -z "$BASE_URL" ]]; then
@@ -109,7 +106,7 @@ jobs:
             fi
             
             # Remove docs/ prefix, handle index files, and remove extensions
-            local url_path=$(echo "$file" | sed -e "s/^${DOCS_PREFIX}//" -e "s/${INDEX_PATTERN}//" -e "s/${EXTENSION_PATTERN}//" | sed 's/\/$//')
+            local url_path=$(echo "$file" | sed -e "s/^docs\///" -e "s/index\.\(md\|ipynb\)$//" -e "s/\.\(md\|ipynb\)$//" | sed 's/\/$//')
             echo "$url_path"
           }
 

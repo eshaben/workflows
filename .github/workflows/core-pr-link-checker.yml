@@ -117,7 +117,6 @@ jobs:
           # Function to process a single file and add to exclude args
           process_file() {
             local file="$1"
-            local change_type="$2"
             
             URL_PATH=$(convert_to_url_path "$file")
             
@@ -127,9 +126,12 @@ jobs:
               return
             fi
             
+            # Exclude URLs for added, modified, and renamed files
+            # - Added files: don't exist on live site yet
+            # - Modified files: may have broken links during update
+            # - Renamed files: old location doesn't exist, new location doesn't exist yet
             EXCLUDED_URL="${BASE_URL}/${URL_PATH}/"
             echo "  🚫 $file → $EXCLUDED_URL"
-            # Use global variable
             EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude $EXCLUDED_URL"
           }
 
@@ -140,7 +142,7 @@ jobs:
           if [[ -n "$ADDED_FILES" ]]; then
             echo "🔗 Excluding URLs for new pages found in this PR:"
             for file in $ADDED_FILES; do
-              [[ -n "$file" ]] && process_file "$file" "added"
+              [[ -n "$file" ]] && process_file "$file"
             done
           fi
 
@@ -148,7 +150,7 @@ jobs:
           if [[ -n "$MODIFIED_FILES" ]]; then
             echo "🔗 Excluding URLs for modified pages found in this PR:"
             for file in $MODIFIED_FILES; do
-              [[ -n "$file" ]] && process_file "$file" "modified"
+              [[ -n "$file" ]] && process_file "$file"
             done
           fi
 
@@ -165,9 +167,29 @@ jobs:
               NEW_PATH=$(echo "$file" | sed 's/^.* -> //')
               
               if [[ -n "$OLD_PATH" && -n "$NEW_PATH" ]]; then
-                # Process both old and new paths
-                process_file "$OLD_PATH" "renamed_old"
-                process_file "$NEW_PATH" "renamed_new"
+                # For renamed files: exclude both old and new URLs
+                # - Old path: doesn't exist on live site anymore
+                # - New path: doesn't exist on live site yet
+                OLD_URL_PATH=$(convert_to_url_path "$OLD_PATH")
+                NEW_URL_PATH=$(convert_to_url_path "$NEW_PATH")
+                
+                # Handle old path (exclude if it's not a private file)
+                if [[ -n "$OLD_URL_PATH" ]]; then
+                  OLD_EXCLUDED_URL="${BASE_URL}/${OLD_URL_PATH}/"
+                  echo "  🚫 $OLD_PATH → $OLD_EXCLUDED_URL (old location)"
+                  EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude $OLD_EXCLUDED_URL"
+                else
+                  echo "  ⏭️  $OLD_PATH → (private file, skipping)"
+                fi
+                
+                # Handle new path (exclude if it's not a private file)
+                if [[ -n "$NEW_URL_PATH" ]]; then
+                  NEW_EXCLUDED_URL="${BASE_URL}/${NEW_URL_PATH}/"
+                  echo "  🚫 $NEW_PATH → $NEW_EXCLUDED_URL (new location)"
+                  EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude $NEW_EXCLUDED_URL"
+                else
+                  echo "  ⏭️  $NEW_PATH → (private file, skipping)"
+                fi
               else
                 echo "  ⚠️  Warning: Could not parse renamed file entry: $file"
               fi
@@ -216,6 +238,8 @@ jobs:
           echo "args=$ARGS" >> $GITHUB_OUTPUT
 
       # Step 8: Run the link checker
+      # This step executes lychee with all the prepared arguments, including exclusions
+      # for changed files to prevent false positives during documentation updates
       - name: 'Run Link Checker (lychee)'
         uses: lycheeverse/lychee-action@v2.4.1
         with:

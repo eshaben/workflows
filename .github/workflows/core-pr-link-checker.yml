@@ -83,7 +83,6 @@ jobs:
         id: link_checking
         env:
           ADDED_FILES: ${{ steps.changed_files.outputs.added_files }}
-          MODIFIED_FILES: ${{ steps.changed_files.outputs.modified_files }}
           RENAMED_FILES: ${{ steps.changed_files.outputs.renamed_files }}
           MKDOCS_REPO_NAME: ${{ steps.vars.outputs.mkdocs_repo_name }}
           BASE_URL: ${{ inputs.url }}
@@ -126,10 +125,9 @@ jobs:
               return
             fi
             
-            # Exclude URLs for added, modified, and renamed files
+            # Exclude URLs for added and renamed files
             # - Added files: don't exist on live site yet
-            # - Modified files: may have broken links during update
-            # - Renamed files: old location doesn't exist, new location doesn't exist yet
+            # - Renamed files: new location doesn't exist on live site yet
             EXCLUDED_URL="${BASE_URL}/${URL_PATH}/"
             echo "  🚫 $file → $EXCLUDED_URL"
             EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude $EXCLUDED_URL"
@@ -146,50 +144,19 @@ jobs:
             done
           fi
 
-          # Handle modified files (exclude from link checking as they may have broken links)
-          if [[ -n "$MODIFIED_FILES" ]]; then
-            echo "🔗 Excluding URLs for modified pages found in this PR:"
-            for file in $MODIFIED_FILES; do
-              [[ -n "$file" ]] && process_file "$file"
-            done
-          fi
-
-          # Handle renamed files (exclude both old and new URLs)
+          # Handle renamed files (exclude new URL path)
           if [[ -n "$RENAMED_FILES" ]]; then
             echo "🔗 Excluding URLs for renamed pages found in this PR:"
             for file in $RENAMED_FILES; do
               [[ -n "$file" ]] || continue
               
-              # For renamed files, we need to handle the old and new paths
+              # For renamed files, extract the new path
               # The renamed_files output contains "old_path -> new_path" format
-              # Use a more robust parsing method that handles spaces in filenames
-              OLD_PATH=$(echo "$file" | sed 's/ -> .*$//')
               NEW_PATH=$(echo "$file" | sed 's/^.* -> //')
               
-              if [[ -n "$OLD_PATH" && -n "$NEW_PATH" ]]; then
-                # For renamed files: exclude both old and new URLs
-                # - Old path: doesn't exist on live site anymore
-                # - New path: doesn't exist on live site yet
-                OLD_URL_PATH=$(convert_to_url_path "$OLD_PATH")
-                NEW_URL_PATH=$(convert_to_url_path "$NEW_PATH")
-                
-                # Handle old path (exclude if it's not a private file)
-                if [[ -n "$OLD_URL_PATH" ]]; then
-                  OLD_EXCLUDED_URL="${BASE_URL}/${OLD_URL_PATH}/"
-                  echo "  🚫 $OLD_PATH → $OLD_EXCLUDED_URL (old location)"
-                  EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude $OLD_EXCLUDED_URL"
-                else
-                  echo "  ⏭️  $OLD_PATH → (private file, skipping)"
-                fi
-                
-                # Handle new path (exclude if it's not a private file)
-                if [[ -n "$NEW_URL_PATH" ]]; then
-                  NEW_EXCLUDED_URL="${BASE_URL}/${NEW_URL_PATH}/"
-                  echo "  🚫 $NEW_PATH → $NEW_EXCLUDED_URL (new location)"
-                  EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude $NEW_EXCLUDED_URL"
-                else
-                  echo "  ⏭️  $NEW_PATH → (private file, skipping)"
-                fi
+              if [[ -n "$NEW_PATH" ]]; then
+                # Process the new path (exclude if it's not a private file)
+                process_file "$NEW_PATH"
               else
                 echo "  ⚠️  Warning: Could not parse renamed file entry: $file"
               fi
@@ -197,14 +164,13 @@ jobs:
           fi
 
           # Summary and output
-          if [[ -z "$ADDED_FILES" && -z "$MODIFIED_FILES" && -z "$RENAMED_FILES" ]]; then
+          if [[ -z "$ADDED_FILES" && -z "$RENAMED_FILES" ]]; then
             echo "✅ No documentation files were changed in this PR."
           else
             # Count files safely
             ADDED_COUNT=$(echo "$ADDED_FILES" | tr -s ' ' '\n' | grep -c . || echo "0")
-            MODIFIED_COUNT=$(echo "$MODIFIED_FILES" | tr -s ' ' '\n' | grep -c . || echo "0")
             RENAMED_COUNT=$(echo "$RENAMED_FILES" | tr -s ' ' '\n' | grep -c . || echo "0")
-            echo "📊 Summary: Processed $ADDED_COUNT added, $MODIFIED_COUNT modified, and $RENAMED_COUNT renamed files"
+            echo "📊 Summary: Processed $ADDED_COUNT added and $RENAMED_COUNT renamed files"
           fi
 
           echo "exclude_args=$EXCLUDE_ARGS" >> $GITHUB_OUTPUT

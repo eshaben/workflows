@@ -89,8 +89,8 @@ jobs:
         run: |
           # Constants
           readonly DOCS_PREFIX="docs/"
-          readonly INDEX_PATTERN="index\\.(md|ipynb)$"
-          readonly EXTENSION_PATTERN="\\.(md|ipynb)$"
+          readonly INDEX_PATTERN="index\.(md|ipynb)$"
+          readonly EXTENSION_PATTERN="\.(md|ipynb)$"
           
           # Validate required environment variables
           if [[ -z "$BASE_URL" ]]; then
@@ -103,7 +103,7 @@ jobs:
             local file="$1"
             
             # Check if the file path starts with a dot (private/hidden files)
-            if [[ "$file" == .* ]]; then
+            if [[ "$file" =~ ^\. ]]; then
               echo ""
               return
             fi

@@ -77,6 +77,8 @@ jobs:
           working_directory: ${{ steps.vars.outputs.mkdocs_repo_name }}/${{ steps.vars.outputs.docs_checkout_path }}
 
       # Step 6: Handle link checking for changed files
+      # This step analyzes changed documentation files and determines which URLs should be
+      # excluded from link checking to prevent false positives during transitions
       - name: 'Handle link checking for changed files'
         id: link_checking
         env:
@@ -86,6 +88,11 @@ jobs:
           MKDOCS_REPO_NAME: ${{ steps.vars.outputs.mkdocs_repo_name }}
           BASE_URL: ${{ inputs.url }}
         run: |
+          # Constants
+          readonly DOCS_PREFIX="docs/"
+          readonly INDEX_PATTERN="index\.(md|ipynb)$"
+          readonly EXTENSION_PATTERN="\.(md|ipynb)$"
+          
           # Validate required environment variables
           if [[ -z "$BASE_URL" ]]; then
             echo "❌ Error: BASE_URL is not set"
@@ -96,7 +103,33 @@ jobs:
           convert_to_url_path() {
             local file="$1"
             # Remove docs/ prefix, handle index files, and remove extensions
-            echo "$file" | sed -e 's/^docs\///' -e 's/index\.\(md\|ipynb\)$//' -e 's/\.\(md\|ipynb\)$//' | sed 's/\/$//'
+            local url_path=$(echo "$file" | sed -e "s/^${DOCS_PREFIX}//" -e "s/${INDEX_PATTERN}//" -e "s/${EXTENSION_PATTERN}//" | sed 's/\/$//')
+            
+            # If the URL path starts with a dot, return empty (these are private/hidden files)
+            if [[ "$url_path" =~ ^\. ]]; then
+              echo ""
+            else
+              echo "$url_path"
+            fi
+          }
+
+          # Function to process a single file and add to exclude args
+          process_file() {
+            local file="$1"
+            local change_type="$2"
+            
+            URL_PATH=$(convert_to_url_path "$file")
+            
+            # Skip files that start with a dot (private/hidden files)
+            if [[ -z "$URL_PATH" ]]; then
+              echo "  ⏭️  $file → (private file, skipping)"
+              return
+            fi
+            
+            EXCLUDED_URL="${BASE_URL}/${URL_PATH}/"
+            echo "  🚫 $file → $EXCLUDED_URL"
+            # Use global variable
+            EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude $EXCLUDED_URL"
           }
 
           # Build exclude arguments for lychee
@@ -106,11 +139,7 @@ jobs:
           if [[ -n "$ADDED_FILES" ]]; then
             echo "🔗 Excluding URLs for new pages found in this PR:"
             for file in $ADDED_FILES; do
-              URL_PATH=$(convert_to_url_path "$file")
-              EXCLUDED_URL="${BASE_URL}/${URL_PATH}/"
-              
-              echo "  🚫 $file → $EXCLUDED_URL"
-              EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude $EXCLUDED_URL"
+              [[ -n "$file" ]] && process_file "$file" "added"
             done
           fi
 
@@ -118,11 +147,7 @@ jobs:
           if [[ -n "$MODIFIED_FILES" ]]; then
             echo "🔗 Excluding URLs for modified pages found in this PR:"
             for file in $MODIFIED_FILES; do
-              URL_PATH=$(convert_to_url_path "$file")
-              EXCLUDED_URL="${BASE_URL}/${URL_PATH}/"
-              
-              echo "  🚫 $file → $EXCLUDED_URL"
-              EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude $EXCLUDED_URL"
+              [[ -n "$file" ]] && process_file "$file" "modified"
             done
           fi
 
@@ -130,6 +155,8 @@ jobs:
           if [[ -n "$RENAMED_FILES" ]]; then
             echo "🔗 Excluding URLs for renamed pages found in this PR:"
             for file in $RENAMED_FILES; do
+              [[ -n "$file" ]] || continue
+              
               # For renamed files, we need to handle the old and new paths
               # The renamed_files output contains "old_path -> new_path" format
               # Use a more robust parsing method that handles spaces in filenames
@@ -137,25 +164,24 @@ jobs:
               NEW_PATH=$(echo "$file" | sed 's/^.* -> //')
               
               if [[ -n "$OLD_PATH" && -n "$NEW_PATH" ]]; then
-                OLD_URL_PATH=$(convert_to_url_path "$OLD_PATH")
-                NEW_URL_PATH=$(convert_to_url_path "$NEW_PATH")
-                
-                OLD_EXCLUDED_URL="${BASE_URL}/${OLD_URL_PATH}/"
-                NEW_EXCLUDED_URL="${BASE_URL}/${NEW_URL_PATH}/"
-                
-                echo "  🚫 $OLD_PATH → $OLD_EXCLUDED_URL"
-                echo "  🚫 $NEW_PATH → $NEW_EXCLUDED_URL"
-                EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude $OLD_EXCLUDED_URL"
-                EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude $NEW_EXCLUDED_URL"
+                # Process both old and new paths
+                process_file "$OLD_PATH" "renamed_old"
+                process_file "$NEW_PATH" "renamed_new"
               else
                 echo "  ⚠️  Warning: Could not parse renamed file entry: $file"
               fi
             done
           fi
 
-          # If no changed files, show a message
+          # Summary and output
           if [[ -z "$ADDED_FILES" && -z "$MODIFIED_FILES" && -z "$RENAMED_FILES" ]]; then
             echo "✅ No documentation files were changed in this PR."
+          else
+            # Count files safely
+            ADDED_COUNT=$(echo "$ADDED_FILES" | tr -s ' ' '\n' | grep -c . || echo "0")
+            MODIFIED_COUNT=$(echo "$MODIFIED_FILES" | tr -s ' ' '\n' | grep -c . || echo "0")
+            RENAMED_COUNT=$(echo "$RENAMED_FILES" | tr -s ' ' '\n' | grep -c . || echo "0")
+            echo "📊 Summary: Processed $ADDED_COUNT added, $MODIFIED_COUNT modified, and $RENAMED_COUNT renamed files"
           fi
 
           echo "exclude_args=$EXCLUDE_ARGS" >> $GITHUB_OUTPUT

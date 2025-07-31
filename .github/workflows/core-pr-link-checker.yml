@@ -89,8 +89,8 @@ jobs:
         run: |
           # Constants
           readonly DOCS_PREFIX="docs/"
-          readonly INDEX_PATTERN="index\.(md|ipynb)$"
-          readonly EXTENSION_PATTERN="\.(md|ipynb)$"
+          readonly INDEX_PATTERN="index\\.(md|ipynb)$"
+          readonly EXTENSION_PATTERN="\\.(md|ipynb)$"
           
           # Validate required environment variables
           if [[ -z "$BASE_URL" ]]; then
@@ -102,8 +102,8 @@ jobs:
           convert_to_url_path() {
             local file="$1"
             
-            # Check if the original file path starts with a dot (private/hidden files)
-            if [[ "$file" =~ ^\. ]]; then
+            # Check if the file path starts with a dot (private/hidden files)
+            if [[ "$file" == .* ]]; then
               echo ""
               return
             fi
